@@ -3,6 +3,11 @@ package email
 import (
 	"github.com/rock-go/rock/lua"
 	"github.com/rock-go/rock/xcall"
+	"reflect"
+)
+
+var (
+	EMAIL = reflect.TypeOf((*Email)(nil)).String()
 )
 
 func (e *Email) Index(L *lua.LState, key string) lua.LValue {
@@ -22,23 +27,23 @@ func (e *Email) Index(L *lua.LState, key string) lua.LValue {
 func (e *Email) NewIndex(L *lua.LState, key string, val lua.LValue) {
 	switch key {
 	case "name":
-		e.C.name = lua.CheckString(L, val)
+		e.cfg.name = lua.CheckString(L, val)
 	case "server":
-		e.C.server = lua.CheckString(L, val)
+		e.cfg.server = lua.CheckString(L, val)
 	case "port":
-		e.C.port = lua.CheckString(L, val)
+		e.cfg.port = lua.CheckInt(L, val)
 	case "from":
-		e.C.from = lua.CheckString(L, val)
+		e.cfg.from = lua.CheckString(L, val)
 	case "password":
-		e.C.password = lua.CheckString(L, val)
+		e.cfg.password = lua.CheckString(L, val)
 	case "buffer":
-		e.C.buffer = lua.CheckInt(L, val)
+		e.cfg.buffer = lua.CheckInt(L, val)
 	}
 }
 
 func (e *Email) start(L *lua.LState) int {
-	if e.status == lua.RUNNING {
-		L.RaiseError("%s email is already running", e.C.name)
+	if e.State() == lua.RUNNING {
+		L.RaiseError("%s email is already running", e.cfg.name)
 		return 0
 	}
 
@@ -51,8 +56,8 @@ func (e *Email) start(L *lua.LState) int {
 }
 
 func (e *Email) close(L *lua.LState) int {
-	if e.status == lua.CLOSE {
-		L.RaiseError("%s email is already closed", e.C.name)
+	if e.S == lua.CLOSE {
+		L.RaiseError("%s email is already closed", e.cfg.name)
 		return 0
 	}
 
@@ -60,7 +65,6 @@ func (e *Email) close(L *lua.LState) int {
 	if err != nil {
 		L.RaiseError("email sender close error: %v", err)
 	}
-
 	return 0
 }
 
@@ -81,34 +85,14 @@ func (e *Email) LSend(L *lua.LState) int {
 	return 0
 }
 
-func createEmailUserData(L *lua.LState) int {
-	opt := L.CheckTable(1)
-	cfg := Config{
-		name:     opt.CheckString("name", "email"),
-		server:   opt.CheckString("server", "mail.eastmoney.com"),
-		port:     opt.CheckString("port", "25"),
-		from:     opt.CheckString("from", "am35@eastmoney.com"),
-		password: opt.CheckString("password", "53xcxWeiXin*0.aq"),
-		buffer:   opt.CheckInt("buffer", 10),
-	}
-
-	email := &Email{C: cfg}
-
-	var obj *Email
-	var ok bool
-
-	proc := L.NewProc(email.C.name)
-	if proc.Value == nil {
-		proc.Value = email
+func newLuaEmail(L *lua.LState) int {
+	cfg := newConfig(L)
+	proc := L.NewProc(cfg.name , EMAIL)
+	if proc.IsNil() {
+		proc.Set(newEmail(cfg))
 		goto done
 	}
-
-	obj, ok = proc.Value.(*Email)
-	if !ok {
-		L.RaiseError("invalid email proc")
-		return 0
-	}
-	obj.C = cfg
+	proc.Value.(*Email).cfg = cfg
 
 done:
 	L.Push(proc)
@@ -116,5 +100,5 @@ done:
 }
 
 func LuaInjectApi(env xcall.Env) {
-	env.Set("email", lua.NewFunction(createEmailUserData))
+	env.Set("email", lua.NewFunction(newLuaEmail))
 }
