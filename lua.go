@@ -4,6 +4,8 @@ import (
 	"github.com/rock-go/rock/lua"
 	"github.com/rock-go/rock/xcall"
 	"reflect"
+	"bytes"
+	"fmt"
 )
 
 var (
@@ -69,13 +71,25 @@ func (e *Email) close(L *lua.LState) int {
 }
 
 func (e *Email) LSend(L *lua.LState) int {
+	n := L.GetTop()
+	if n < 3 {
+		L.TypeError(3 , lua.LTString)
+		return 0
+	}
+
 	to := L.CheckString(1)
 	subject := L.CheckString(2)
-	content := []byte(L.CheckString(3))
+
+	var buff bytes.Buffer
+	for i:= 3; i<=n;i++ {
+		item := lua.S2B(fmt.Sprintf("%v" , L.Get(i)))
+		buff.Write(item)
+	}
+
 	obj := Obj{
 		to:      to,
 		subject: subject,
-		content: content,
+		content: buff.Bytes(),
 	}
 
 	if err := e.SendMail(obj); err != nil {

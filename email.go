@@ -8,6 +8,7 @@ import (
 	"github.com/rock-go/rock/lua"
 	"net/smtp"
 	"time"
+	tls "crypto/tls"
 )
 
 type Email struct {
@@ -47,6 +48,7 @@ func (e *Email) Init() {
 }
 
 func (e *Email) loop() {
+
 	for {
 		select {
 		case data, ok := <-e.mailChan:
@@ -54,11 +56,11 @@ func (e *Email) loop() {
 				logger.Errorf("get email content error")
 				continue
 			}
-
 			e.em.To = formatAddr(data.to)
 			e.em.Text = data.content
 			e.em.Subject = data.subject
-			if err := e.em.Send(e.cfg.addr(), e.auth); err != nil {
+			if err := e.em.SendWithStartTLS(e.cfg.addr() , e.auth ,
+				&tls.Config{ServerName: e.cfg.server , InsecureSkipVerify: true}) ; err != nil {
 				logger.Errorf("send email error: %v", err)
 			}
 
