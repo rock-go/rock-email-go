@@ -37,16 +37,17 @@ proc.start(email) -- 启动
 -- param3: 邮件内容
 -- param4: 邮件内容
 -- param4: 邮件内容
-email.send("961756805@qq.com", "测试邮件",
+email.send("xxxxx@qq.com", "测试邮件",
         "这是一封测试邮件，请忽略", " 这是第二段内容")
 
 -- 发送html或附件
-local data = "<body background='https://security.eastmoney.com/assets/img/fake_email.png?m=sunke@eastmoney.com'>尊敬的同事：<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;您好！VPN密码已重置，密码为618@VPNpwd，请及时登录并修改为强密码。</body>"
+local data = "<body background='https://xxxxx.test.com/assets/img/fake_email.png?m=xxx@qq.com'>尊敬的同事：<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;您好！VPN密码已重置，密码为618@VPNpwd，请及时登录并修改为强密码。</body>"
 local content = {
-    to = "961756805@qq.com",
+    to = "xxx@qq.com",
     subject = "测试邮件",
     typ = "html",
     content = data,
+    -- 附件路径，逗号分隔
     attach = ""
 }
 
