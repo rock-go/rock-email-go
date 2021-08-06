@@ -2,13 +2,15 @@ package email
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"github.com/jordan-wright/email"
 	"github.com/rock-go/rock/logger"
 	"github.com/rock-go/rock/lua"
+	"mime"
 	"net/smtp"
 	"time"
-	tls "crypto/tls"
 )
 
 type Email struct {
@@ -25,16 +27,31 @@ type Email struct {
 }
 
 func newEmail(cfg *config) *Email {
-	em := &Email{ cfg:cfg }
+	em := &Email{cfg: cfg}
 	em.S = lua.INIT
 	em.T = EMAIL
 	return em
 }
 
-func (e *Email) SendMail(o Obj) error {
+// SendMail 参数传递采用interface{}，以供其它模块golang直接调用
+func (e *Email) SendMail(v interface{}) error {
 	if e.S == lua.CLOSE {
 		return errors.New("mail send service closed")
 	}
+
+	var o Obj
+	switch v.(type) {
+	case []byte:
+		err := json.Unmarshal(v.([]byte), &o)
+		if err != nil {
+			return err
+		}
+	case Obj:
+		o = v.(Obj)
+	default:
+		logger.Errorf("error type mail content")
+	}
+
 	e.mailChan <- o
 	return nil
 }
@@ -47,8 +64,16 @@ func (e *Email) Init() {
 	e.ctx, e.cancel = context.WithCancel(context.Background())
 }
 
-func (e *Email) loop() {
+func (e *Email) Start() error {
+	e.Init()
+	go e.loop()
+	e.S = lua.RUNNING
+	e.U = time.Now()
+	logger.Infof("%s email start successfully", e.Name())
+	return nil
+}
 
+func (e *Email) loop() {
 	for {
 		select {
 		case data, ok := <-e.mailChan:
@@ -56,13 +81,20 @@ func (e *Email) loop() {
 				logger.Errorf("get email content error")
 				continue
 			}
-			e.em.To = formatAddr(data.to)
-			e.em.Text = data.content
-			e.em.Subject = data.subject
-			if err := e.em.SendWithStartTLS(e.cfg.addr() , e.auth ,
-				&tls.Config{ServerName: e.cfg.server , InsecureSkipVerify: true}) ; err != nil {
+
+			if err := e.formatEmail(data); err != nil {
+				logger.Errorf("format email object error: %v", err)
+				continue
+			}
+
+			if err := e.em.SendWithStartTLS(e.cfg.addr(), e.auth,
+				&tls.Config{ServerName: e.cfg.server, InsecureSkipVerify: true}); err != nil {
 				logger.Errorf("send email error: %v", err)
 			}
+
+			e.em.Text = nil
+			e.em.HTML = nil
+			e.em.Attachments = nil
 
 		case <-e.ctx.Done():
 			logger.Errorf("%s email sender exit", e.Name())
@@ -72,13 +104,25 @@ func (e *Email) loop() {
 	}
 }
 
+// 格式化邮件
+func (e *Email) formatEmail(obj Obj) error {
+	e.em.To = formatAddr(obj.To)
+	e.em.Text = obj.Content
+	if obj.Typ == "html" {
+		e.em.Text = nil
+		e.em.HTML = obj.Content
+	}
+	e.em.Subject = obj.Subject
 
-func (e *Email) Start() error {
-	e.Init()
-	go e.loop()
-	e.S = lua.RUNNING
-	e.U = time.Now()
-	logger.Infof("%s email start successfully", e.Name())
+	for i, a := range obj.Attachments {
+		_, err := e.em.AttachFile(a)
+		if err != nil {
+			return err
+		}
+		// 防止中文乱码
+		qEncodedFilename := mime.QEncoding.Encode("UTF-8", e.em.Attachments[i].Filename)
+		e.em.Attachments[i].Filename = qEncodedFilename
+	}
 	return nil
 }
 

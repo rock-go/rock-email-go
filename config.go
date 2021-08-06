@@ -1,20 +1,20 @@
 package email
 
 import (
-	"github.com/rock-go/rock/lua"
-	"strings"
-	"github.com/rock-go/rock/utils"
 	"errors"
 	"fmt"
+	"github.com/rock-go/rock/lua"
+	"github.com/rock-go/rock/utils"
+	"strings"
 )
 
 type config struct {
-	name      string
-	server    string
-	port      int
+	name   string
+	server string
+	port   int
 
-	from      string
-	password  string
+	from     string
+	password string
 
 	buffer int // 缓存邮件数量
 }
@@ -25,24 +25,30 @@ func newConfig(L *lua.LState) *config {
 
 	tab.ForEach(func(key lua.LValue, val lua.LValue) {
 		if key.Type() != lua.LTString {
-			L.RaiseError("invalid options %s" , key.Type().String())
+			L.RaiseError("invalid options %s", key.Type().String())
 			return
 		}
 
 		switch key.String() {
-		case "name": cfg.name = val.String()
-		case "from": cfg.from = val.String()
-		case "server": cfg.server = val.String()
-		case "password": cfg.password = val.String()
-		case "port": cfg.port = utils.LValueToInt(val , 0)
-		case "buffer": cfg.buffer = utils.LValueToInt(val , 10)
+		case "name":
+			cfg.name = val.String()
+		case "from":
+			cfg.from = val.String()
+		case "server":
+			cfg.server = val.String()
+		case "password":
+			cfg.password = val.String()
+		case "port":
+			cfg.port = utils.LValueToInt(val, 0)
+		case "buffer":
+			cfg.buffer = utils.LValueToInt(val, 10)
 		default:
-			L.RaiseError("invalid options %s key" , key.String())
+			L.RaiseError("invalid options %s key", key.String())
 		}
 	})
 
 	if e := cfg.verify(); e != nil {
-		L.RaiseError("%v" , e)
+		L.RaiseError("%v", e)
 		return nil
 	}
 
@@ -50,7 +56,7 @@ func newConfig(L *lua.LState) *config {
 }
 
 func (cfg *config) verify() error {
-	if e := utils.Name(cfg.name) ; e != nil {
+	if e := utils.Name(cfg.name); e != nil {
 		return e
 	}
 
@@ -62,14 +68,15 @@ func (cfg *config) verify() error {
 }
 
 func (cfg *config) addr() string {
-	return fmt.Sprintf("%s:%d" , cfg.server , cfg.port)
+	return fmt.Sprintf("%s:%d", cfg.server, cfg.port)
 }
 
-
 type Obj struct {
-	to      string
-	subject string
-	content []byte
+	To          string   `json:"to"`
+	Subject     string   `json:"subject"`
+	Typ         string   `json:"typ"` // text, html
+	Content     []byte   `json:"content"`
+	Attachments []string `json:"attachments"` // 附件链接
 }
 
 func formatAddr(s string) []string {

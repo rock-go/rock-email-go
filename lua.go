@@ -1,11 +1,12 @@
 package email
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/rock-go/rock/lua"
 	"github.com/rock-go/rock/xcall"
 	"reflect"
-	"bytes"
-	"fmt"
+	"strings"
 )
 
 var (
@@ -21,6 +22,9 @@ func (e *Email) Index(L *lua.LState, key string) lua.LValue {
 	}
 	if key == "send" {
 		return lua.NewFunction(e.LSend)
+	}
+	if key == "send_obj" {
+		return lua.NewFunction(e.LSendObj)
 	}
 
 	return lua.LNil
@@ -73,7 +77,7 @@ func (e *Email) close(L *lua.LState) int {
 func (e *Email) LSend(L *lua.LState) int {
 	n := L.GetTop()
 	if n < 3 {
-		L.TypeError(3 , lua.LTString)
+		L.TypeError(3, lua.LTString)
 		return 0
 	}
 
@@ -81,15 +85,15 @@ func (e *Email) LSend(L *lua.LState) int {
 	subject := L.CheckString(2)
 
 	var buff bytes.Buffer
-	for i:= 3; i<=n;i++ {
-		item := lua.S2B(fmt.Sprintf("%v" , L.Get(i)))
+	for i := 3; i <= n; i++ {
+		item := lua.S2B(fmt.Sprintf("%v", L.Get(i)))
 		buff.Write(item)
 	}
 
 	obj := Obj{
-		to:      to,
-		subject: subject,
-		content: buff.Bytes(),
+		To:      to,
+		Subject: subject,
+		Content: buff.Bytes(),
 	}
 
 	if err := e.SendMail(obj); err != nil {
@@ -99,9 +103,40 @@ func (e *Email) LSend(L *lua.LState) int {
 	return 0
 }
 
+// LSendObj 发送更为详细的邮件.参数：收件人，主题，邮件格式，邮件正文，附件
+func (e *Email) LSendObj(L *lua.LState) int {
+	obj := checkObj(L)
+	if err := e.SendMail(*obj); err != nil {
+		L.RaiseError("send email error: %v", err)
+	}
+
+	return 0
+}
+
+func checkObj(L *lua.LState) *Obj {
+	tb := L.CheckTable(1)
+	to := tb.RawGetString("to").String()
+	subject := tb.RawGetString("subject").String()
+	typ := tb.RawGetString("typ").String()
+	content := lua.S2B(tb.RawGetString("content").String())
+	attach := tb.RawGetString("attach").String()
+	attachments := make([]string, 0)
+	if attach != "" {
+		attachments = strings.Split(attach, ",")
+	}
+
+	return &Obj{
+		To:          to,
+		Subject:     subject,
+		Typ:         typ,
+		Content:     content,
+		Attachments: attachments,
+	}
+}
+
 func newLuaEmail(L *lua.LState) int {
 	cfg := newConfig(L)
-	proc := L.NewProc(cfg.name , EMAIL)
+	proc := L.NewProc(cfg.name, EMAIL)
 	if proc.IsNil() {
 		proc.Set(newEmail(cfg))
 		goto done
